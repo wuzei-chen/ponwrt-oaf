@@ -1,0 +1,129 @@
+name: Build OAF kmod for PonWrt 6.18.52
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target to build for'
+        required: true
+        default: 'an7581'
+        type: choice
+        options:
+          - an7581
+          - an7583
+
+env:
+  # 涓庤澶囧浐浠跺悓婧愬悓鐗堟湰锛?etc/openwrt_release 鏄剧ず r0-c3b518b锛屽唴鏍?6.18.52
+  PONWRT_REPO: huladabang/ponwrt
+  PONWRT_REF: c3b518b
+
+jobs:
+  build-oaf:
+    name: Build kmod-oaf (${{ inputs.target }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout helper repo
+        uses: actions/checkout@v6
+
+      - name: Free build space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc || true
+          df -h /
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler flex gawk \
+            gettext git g++-multilib gcc-multilib gperf help2man intltool \
+            libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
+            libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev \
+            libtool libyaml-dev lld llvm ninja-build p7zip-full patch pkgconf \
+            python3 python3-docutils python3-pip python3-ply python3-pyelftools \
+            qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo \
+            uglifyjs unzip wget xmlto xxd zlib1g-dev zstd
+
+      - name: Clone PonWrt tree (pinned)
+        run: |
+          git clone --depth 1 --branch master \
+            https://github.com/${PONWRT_REPO}.git ponwrt
+          cd ponwrt
+          echo "=== HEAD ==="
+          git log --oneline -1
+          echo "=== kernel version ==="
+          cat target/linux/generic/kernel-6.18
+
+      - name: Place config file
+        run: |
+          cp oaf.config ponwrt/configs/oaf.config
+          cat ponwrt/configs/oaf.config
+
+      - name: Update and install feeds
+        working-directory: ponwrt
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          echo "=== open-app-filter ==="
+          ls -la package/feeds/packages/net/open-app-filter/ || true
+
+      - name: Configure
+        working-directory: ponwrt
+        run: |
+          ./scripts/kconfig.pl + "configs/${{ inputs.target }}.config" configs/release.config > .config
+          cat configs/oaf.config >> .config
+          make defconfig
+          echo "=== OAF entries ==="
+          grep -i -E 'oaf|appfilter' .config || echo "(none)"
+
+      - name: Download sources
+        working-directory: ponwrt
+        run: make download -j8 || true
+
+      - name: Build host tools
+        working-directory: ponwrt
+        run: make tools/install -j$(nproc) 2>&1 | tail -30
+
+      - name: Build toolchain
+        working-directory: ponwrt
+        run: make toolchain/install -j$(nproc) 2>&1 | tail -30
+
+      - name: Build kernel
+        working-directory: ponwrt
+        run: make target/compile -j$(nproc) 2>&1 | tail -60
+
+      - name: Build kmod-oaf
+        working-directory: ponwrt
+        shell: bash
+        run: |
+          set -o pipefail
+          make package/feeds/packages/open-app-filter/compile V=s -j1 2>&1 | tail -400
+
+      - name: Locate artifacts
+        working-directory: ponwrt
+        run: |
+          echo "=== oaf.ko ==="
+          find build_dir -name 'oaf.ko' -exec ls -la {} \; || true
+          echo "=== apk ==="
+          find bin -name '*oaf*' -o -name '*appfilter*' | head -20
+
+      - name: Collect artifacts
+        working-directory: ponwrt
+        run: |
+          mkdir -p ../out
+          find build_dir -name 'oaf.ko' -exec cp -v {} ../out/ \; || true
+          find bin \( -name '*oaf*' -o -name '*appfilter*' \) -type f -exec cp -v {} ../out/ \; || true
+          echo "=== collected ==="
+          ls -la ../out/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: oaf-${{ inputs.target }}-6.18.52
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
