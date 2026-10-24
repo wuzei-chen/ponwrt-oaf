@@ -6,6 +6,9 @@ name: Build PonWrt an7581 (upstream)
 # 上游 configs 与 huladabang 的实质等价（2026-10-24 diff 核验，仅 6 行 EVB 冗余声明差异）
 
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/build_latest.yml']
   workflow_dispatch:
     inputs:
       ref:
