@@ -1,0 +1,150 @@
+name: Build OAF kmod for PonWrt 6.18.55 (upstream)
+
+# ============================================================================
+# 目标：为 2026-10-24 自编译固件（run 40070505725，内核 6.18.55，pbs05/ponwrt@master）
+#       重编 OAF 内核模块，替代为 6.18.52 编译的旧 oaf.ko（vermagic 已失效）。
+#
+# 刷机前不要跑：设备当前内核 6.18.52，装 6.18.55 的 kmod 无意义。
+# 刷机后使用：
+#   1) 设备上 uname -r 确认 6.18.55；cat /lib/modules/$(uname -r)/vermagic 留档
+#   2) 触发本 workflow（推本文件或 Actions 手动 Run）
+#   3) 产物按 F:\BL\xg040gmd\OAF部署记录.md 的流程部署：
+#      apk extract --allow-untrusted（绕内核 ABI 哈希）→ cp 到 /lib/modules/6.18.55/ →
+#      insmod 验证 "oaf: Driver ver ... init ok"
+#   4) 完成判据：pgrep oafd 正常 + ubus call oaf get_oaf_status 返回版本
+#
+# ABI 兜底：若 oaf.ko 因 vermagic/ABI 哈希不匹配拒载，把下方 PONWRT_REF 从 master 改为
+#   固件构建时刻的 pbs05/ponwrt 实际 commit（查看 Actions run 40070505725 日志中
+#   "Building pbs05/ponwrt @ <sha>" 一行的 sha），重跑。
+# ============================================================================
+
+on:
+  push:
+    paths: ['.github/workflows/oaf-rebuild.yml']
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target to build for'
+        required: true
+        default: 'an7581'
+        type: choice
+        options:
+          - an7581
+          - an7583
+
+env:
+  PONWRT_REPO: pbs05/ponwrt
+  PONWRT_REF: master
+
+jobs:
+  build-oaf:
+    name: Build kmod-oaf (${{ inputs.target }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout helper repo
+        uses: actions/checkout@v6
+
+      - name: Free build space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc || true
+          df -h /
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler flex gawk \
+            gettext git g++-multilib gcc-multilib gperf help2man intltool \
+            libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
+            libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev \
+            libtool libyaml-dev lld llvm ninja-build p7zip-full patch pkgconf \
+            python3 python3-docutils python3-pip python3-ply python3-pyelftools \
+            qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo \
+            uglifyjs unzip wget xmlto xxd zlib1g-dev zstd
+
+      - name: Clone PonWrt tree
+        run: |
+          git clone --depth 1 --branch "${PONWRT_REF}" \
+            https://github.com/${PONWRT_REPO}.git ponwrt
+          cd ponwrt
+          echo "=== HEAD ==="
+          git log --oneline -1
+          echo "=== kernel version ==="
+          cat target/linux/generic/kernel-6.18 2>/dev/null || true
+
+      - name: Place config file
+        run: |
+          cp oaf.config ponwrt/configs/oaf.config
+          cat ponwrt/configs/oaf.config
+
+      - name: Update and install feeds
+        working-directory: ponwrt
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          echo "=== open-app-filter ==="
+          ls -la package/feeds/packages/net/open-app-filter/ || true
+
+      - name: Configure
+        working-directory: ponwrt
+        run: |
+          ./scripts/kconfig.pl + "configs/${{ inputs.target }}.config" configs/release.config > .config
+          cat configs/oaf.config >> .config
+          make defconfig
+          echo "=== OAF entries ==="
+          grep -i -E 'oaf|appfilter' .config || echo "(none)"
+
+      - name: Download sources
+        working-directory: ponwrt
+        run: make download -j8 || true
+
+      - name: Build host tools
+        working-directory: ponwrt
+        run: make tools/install -j$(nproc) 2>&1 | tail -30
+
+      - name: Build toolchain
+        working-directory: ponwrt
+        run: make toolchain/install -j$(nproc) 2>&1 | tail -30
+
+      - name: Build kernel
+        working-directory: ponwrt
+        run: make target/compile -j$(nproc) 2>&1 | tail -60
+
+      - name: Build kmod-oaf
+        working-directory: ponwrt
+        shell: bash
+        run: |
+          set -o pipefail
+          make package/feeds/packages/open-app-filter/compile V=s -j1 2>&1 | tail -400
+
+      - name: Locate artifacts
+        working-directory: ponwrt
+        run: |
+          echo "=== oaf.ko ==="
+          find build_dir -name 'oaf.ko' -exec ls -la {} \; || true
+          echo "=== vermagic (must match device uname -r) ==="
+          find build_dir -name 'oaf.ko' -exec modinfo {} \; 2>/dev/null | grep -E '^vermagic' || true
+          echo "=== apk ==="
+          find bin -name '*oaf*' -o -name '*appfilter*' | head -20
+
+      - name: Collect artifacts
+        working-directory: ponwrt
+        run: |
+          mkdir -p ../out
+          find build_dir -name 'oaf.ko' -exec cp -v {} ../out/ \; || true
+          find bin \( -name '*oaf*' -o -name '*appfilter*' \) -type f -exec cp -v {} ../out/ \; || true
+          echo "=== collected ==="
+          ls -la ../out/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: oaf-${{ inputs.target }}-6.18.55
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
