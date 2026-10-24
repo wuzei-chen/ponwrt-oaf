@@ -76,7 +76,19 @@ jobs:
           ./scripts/kconfig.pl + \
             configs/an7581.config \
             configs/release.config > .config
+          # 本机定制增量（2026-10-24 起）：
+          #  - zram-swap：内存压缩交换（用户要求）
+          #  - bash/ip-full/lsblk：quickstart 硬依赖，内建免去刷机后重装
+          #  - oaf/kmod-oaf：OAF 内建，vermagic 永远匹配内核，退役单独重编
+          echo 'CONFIG_PACKAGE_zram-swap=y' >> .config
+          echo 'CONFIG_PACKAGE_bash=y' >> .config
+          echo 'CONFIG_PACKAGE_ip-full=y' >> .config
+          echo 'CONFIG_PACKAGE_lsblk=y' >> .config
+          echo 'CONFIG_PACKAGE_oaf=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-oaf=y' >> .config
           make defconfig
+          echo "=== custom additions resolved ==="
+          grep -E 'CONFIG_PACKAGE_(zram-swap|bash|ip-full|lsblk|oaf)=' .config || true
 
       - name: Download sources
         run: make download -j"$(nproc)"
