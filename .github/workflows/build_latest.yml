@@ -32,7 +32,10 @@ jobs:
     steps:
       - name: Clone PonWrt source
         run: |
-          git clone --depth 1 --branch "${{ inputs.ref }}" https://github.com/pbs05/ponwrt.git .
+          REF="${{ inputs.ref }}"
+          REF="${REF:-master}"
+          echo "Building pbs05/ponwrt @ $REF"
+          git clone --depth 1 --branch "$REF" https://github.com/pbs05/ponwrt.git .
 
       - name: Free build space
         run: |
