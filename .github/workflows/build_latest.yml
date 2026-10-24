@@ -1,0 +1,102 @@
+name: Build PonWrt an7581 (upstream)
+
+# 用法：放到自己 GitHub 空仓库的 .github/workflows/ 下，Actions 页面手动触发（workflow_dispatch）
+# 构建内容：clone pbs05/ponwrt 指定 ref（默认 master）→ 全量构建 an7581 → 产出 ponwrt-an7581.tar.zst
+# 参考原型：huladabang/ponwrt release.yml（已验证可产出当前设备正在运行的固件）
+# 上游 configs 与 huladabang 的实质等价（2026-10-24 diff 核验，仅 6 行 EVB 冗余声明差异）
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'pbs05/ponwrt ref to build'
+        required: false
+        default: 'master'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-an7581-${{ inputs.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build an7581 from ${{ inputs.ref }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Clone PonWrt source
+        run: |
+          git clone --depth 1 --branch "${{ inputs.ref }}" https://github.com/pbs05/ponwrt.git .
+
+      - name: Free build space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get clean
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler flex gawk \
+            gettext git g++-multilib gcc-multilib gperf help2man intltool \
+            libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
+            libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev \
+            libtool libyaml-dev lld llvm ninja-build p7zip-full patch pkgconf \
+            python3 python3-docutils python3-pip python3-ply python3-pyelftools \
+            qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo \
+            uglifyjs unzip wget xmlto xxd zlib1g-dev zstd
+
+      - name: Cache downloads
+        uses: actions/cache@v4
+        with:
+          path: dl
+          key: ponwrt-dl-an7581-${{ hashFiles('feeds.conf.default', 'configs/*.config') }}
+          restore-keys: |
+            ponwrt-dl-an7581-
+
+      - name: Install feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Configure an7581
+        run: |
+          ./scripts/kconfig.pl + \
+            configs/an7581.config \
+            configs/release.config > .config
+          make defconfig
+
+      - name: Download sources
+        run: make download -j"$(nproc)"
+
+      - name: Build
+        run: |
+          set -o pipefail
+          make -j"$(nproc)"
+
+      - name: List built images
+        run: |
+          echo "=== bin/targets/airoha/an7581 ==="
+          ls -l bin/targets/airoha/an7581/ || true
+          echo "=== nokia images ==="
+          find bin/targets/airoha/an7581 -type f -name '*nokia*' -exec ls -l {} \;
+
+      - name: Pack
+        run: |
+          mkdir release
+          tar --zstd -cf release/ponwrt-an7581.tar.zst -C bin/targets/airoha an7581
+          sha256sum release/*.tar.zst > release/sha256sums
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ponwrt-an7581-${{ inputs.ref }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 14
