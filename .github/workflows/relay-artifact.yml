@@ -1,0 +1,39 @@
+name: Relay artifact to Release
+
+# 将指定 run 的 artifact 转存为 GitHub Release（artifact 14 天过期，Release 永久，且 release
+# 下载走 github.com 域名，本机网络可达 api.github.com 不可达）
+# 本次硬编码 artifact id：12552984689（run 40070505725, ponwrt-an7581-master）
+
+on:
+  push:
+    paths: ['.github/workflows/relay-artifact.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download artifact and create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: '12552984689'
+          TAG: 'ponwrt-an7581-master-20261024'
+        run: |
+          set -euxo pipefail
+          gh api "/repos/wuzei-chen/ponwrt-oaf/actions/artifacts/$ARTIFACT_ID/zip" > art.zip
+          mkdir pkg && unzip -o art.zip -d pkg
+          ls -l pkg/
+          if gh release view "$TAG" --repo wuzei-chen/ponwrt-oaf; then
+            gh release upload "$TAG" pkg/* --repo wuzei-chen/ponwrt-oaf --clobber
+          else
+            gh release create "$TAG" pkg/* \
+              --repo wuzei-chen/ponwrt-oaf \
+              --target main \
+              --title "PonWrt an7581 @ upstream master (2026-10-24)" \
+              --notes "Built from pbs05/ponwrt master by run 40070505725. Contains ponwrt-an7581.tar.zst + sha256sums."
+          fi
