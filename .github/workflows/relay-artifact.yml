@@ -27,7 +27,14 @@ jobs:
           set -euxo pipefail
           gh api "/repos/wuzei-chen/ponwrt-oaf/actions/artifacts/$ARTIFACT_ID/zip" > art.zip
           mkdir pkg && unzip -o art.zip -d pkg
-          ls -l pkg/
+          # 只保留小体积可直下的镜像文件（nokia sysupgrade/factory + sha256），丢弃 373MB tar.zst
+          cd pkg
+          tar --zstd -xf ponwrt-an7581.tar.zst
+          find . -type f \( -iname '*nokia*' -o -name 'sha256sums' \) -exec mv {} . \;
+          find . -maxdepth 1 -type f ! -iname '*nokia*' ! -name 'sha256sums' -delete
+          rm -rf an7581
+          ls -l
+          cd ..
           if gh release view "$TAG" --repo wuzei-chen/ponwrt-oaf; then
             gh release upload "$TAG" pkg/* --repo wuzei-chen/ponwrt-oaf --clobber
           else
