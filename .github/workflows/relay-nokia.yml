@@ -21,13 +21,16 @@ jobs:
       - name: Extract Nokia XG-040G-MD images and upload
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACT_ID: '12552984689'
-          TAG: 'ponwrt-an7581-master-20261024'
+          ARTIFACT_ID: '12569577876'
+          TAG: 'ponwrt-an7581-v3-20261025'
         run: |
           set -euxo pipefail
           gh api "/repos/wuzei-chen/ponwrt-oaf/actions/artifacts/$ARTIFACT_ID/zip" > art.zip
           unzip -q art.zip -d pkg
           tar --zstd -xf pkg/ponwrt-an7581.tar.zst
+          echo "=== 增量包验证（zram/OAF/luci-compat/bash 等必须命中）==="
+          find an7581/packages -name '*.apk' 2>/dev/null | grep -E 'zram|oaf|luci-compat|bash|ip-full|lsblk' | head -12 || true
+          find an7581 -name 'kmod-zram*' -o -name 'zram-swap*' | head -4 || true
           mkdir out
           find an7581 -type f -name '*nokia*xg-040g-md*' -exec cp {} out/ \;
           echo "=== extracted files ==="
