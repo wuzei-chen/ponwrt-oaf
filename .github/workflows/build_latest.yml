@@ -107,6 +107,14 @@ jobs:
           echo 'CONFIG_PACKAGE_kmod-veth=y' >> .config
           echo 'CONFIG_PACKAGE_kmod-xdp-sockets-diag=y' >> .config
           echo 'CONFIG_PACKAGE_kmod-nft-tproxy=y' >> .config
+          # 2026-10-25 三次教训：KERNEL_ 顶层选项在探针中解析正确，但内核实际
+          # 未带 BTF（传递链在 target/compile 的内核配置合并环节失效）。
+          # 改为直接写目标级内核配置文件（必然生效），并保留 KERNEL_ 行。
+          echo 'CONFIG_DEBUG_INFO_BTF=y' >> target/linux/airoha/an7581/config-6.18
+          echo 'CONFIG_BPF_EVENTS=y' >> target/linux/airoha/an7581/config-6.18
+          echo 'CONFIG_CGROUP_BPF=y' >> target/linux/airoha/an7581/config-6.18
+          echo 'CONFIG_XDP_SOCKETS=y' >> target/linux/airoha/an7581/config-6.18
+          echo 'CONFIG_NET_SCH_BPF=y' >> target/linux/airoha/an7581/config-6.18
           make defconfig
           echo "=== custom additions resolved ==="
           grep -E 'CONFIG_PACKAGE_(zram-swap|bash|ip-full|lsblk|appfilter|dae|kmod-(oaf|sched-bpf|veth|xdp-sockets-diag|nft-tproxy))=' .config || true
