@@ -11,7 +11,7 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Probe
         run: |
@@ -45,6 +45,12 @@ jobs:
             grep -E 'CONFIG_(KERNEL_DEBUG_INFO|KERNEL_DEBUG_INFO_BTF|KERNEL_BPF_EVENTS|KERNEL_XDP_SOCKETS|KERNEL_CGROUP_BPF|BPF_TOOLCHAIN|HAS_BPF_TOOLCHAIN)' .config || echo "KERNEL LINES DROPPED"
             echo "== packages resolved =="
             grep -E 'CONFIG_PACKAGE_(dae|kmod-sched-bpf|kmod-veth|kmod-xdp-sockets-diag|kmod-nft-tproxy)=' .config || echo "PACKAGE LINES DROPPED"
+            echo "== kernel prepare (config generation only) =="
+            make target/linux/prepare -j2 > /dev/null 2>&1; echo "prepare rc=$?"
+            KC=$(find build_dir -path '*linux*' -name '.config' -newer Makefile 2>/dev/null | head -1)
+            [ -z "$KC" ] && KC=$(find build_dir -path '*linux*' -name '.config' 2>/dev/null | head -1)
+            echo "kernel config: $KC"
+            grep -E 'CONFIG_(DEBUG_INFO|DEBUG_INFO_BTF|DEBUG_INFO_REDUCED|BPF_SYSCALL|XDP_SOCKETS|NET_SCH_BPF|BPF_EVENTS|CGROUP_BPF)=' "$KC" 2>/dev/null || echo "grep failed" 
           } > /tmp/probe-out.txt 2>&1
           cat /tmp/probe-out.txt
           cp /tmp/probe-out.txt "$GITHUB_WORKSPACE/probe-out.txt" || true
