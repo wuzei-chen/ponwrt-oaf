@@ -81,16 +81,28 @@ jobs:
           #  - bash/ip-full/lsblk：quickstart 硬依赖，内建免去刷机后重装
           #  - oaf/kmod-oaf：OAF 后端内建，vermagic 永远匹配内核，退役单独重编
           #  - luci-compat：CBI 框架（OAF 前端硬依赖，2026-10-24 晚发现缺失）
+          #  - appfilter/kmod-oaf：OAF 全套内建（用户态包名是 appfilter 不是 oaf！
+          #    2026-10-25 v3 教训：写成 oaf 被 defconfig 静默丢弃，导致固件有 ko 无 oafd）
           echo 'CONFIG_PACKAGE_zram-swap=y' >> .config
           echo 'CONFIG_PACKAGE_bash=y' >> .config
           echo 'CONFIG_PACKAGE_ip-full=y' >> .config
           echo 'CONFIG_PACKAGE_lsblk=y' >> .config
-          echo 'CONFIG_PACKAGE_oaf=y' >> .config
+          echo 'CONFIG_PACKAGE_appfilter=y' >> .config
           echo 'CONFIG_PACKAGE_kmod-oaf=y' >> .config
           echo 'CONFIG_PACKAGE_luci-compat=y' >> .config
+          #  - dae eBPF 透明代理（2026-10-25 改进1，对齐恩山"光猫吃鹅"）：
+          #    内核必须开 DEBUG_INFO_BTF，dae 硬依赖；kmod 四件套为 dae DEPENDS
+          echo 'CONFIG_DEBUG_INFO_BTF=y' >> .config
+          echo 'CONFIG_PACKAGE_dae=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-sched-bpf=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-veth=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-xdp-sockets-diag=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nft-tproxy=y' >> .config
           make defconfig
           echo "=== custom additions resolved ==="
-          grep -E 'CONFIG_PACKAGE_(zram-swap|bash|ip-full|lsblk|oaf)=' .config || true
+          grep -E 'CONFIG_PACKAGE_(zram-swap|bash|ip-full|lsblk|appfilter|dae|kmod-(oaf|sched-bpf|veth|xdp-sockets-diag|nft-tproxy))=' .config || true
+          echo "=== kernel BTF ==="
+          grep -E 'CONFIG_DEBUG_INFO_BTF=' .config || echo 'WARN: BTF dropped by defconfig!'
 
       - name: Download sources
         run: make download -j"$(nproc)"
