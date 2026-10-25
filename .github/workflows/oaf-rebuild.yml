@@ -13,6 +13,7 @@ name: Build OAF kmod for PonWrt 6.18.55 (upstream)
 #      insmod 验证 "oaf: Driver ver ... init ok"
 #   4) 完成判据：pgrep oafd 正常 + ubus call oaf get_oaf_status 返回版本
 #
+# 注释触发重编（2026-10-25 v3: libubus 20260925 需匹配重编）
 # ABI 兜底：若 oaf.ko 因 vermagic/ABI 哈希不匹配拒载，把下方 PONWRT_REF 从 master 改为
 #   固件构建时刻的 pbs05/ponwrt 实际 commit（查看 Actions run 40070505725 日志中
 #   "Building pbs05/ponwrt @ <sha>" 一行的 sha），重跑。
