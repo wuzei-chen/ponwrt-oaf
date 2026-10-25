@@ -97,6 +97,9 @@ jobs:
           #    BPF 工具链显式选 BUILD_LLVM（自包含，不依赖 runner 上的宿主 LLVM 版本）。
           echo '# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set' >> .config
           echo 'CONFIG_KERNEL_DEBUG_INFO_BTF=y' >> .config
+          # base an7581.config 显式 not set 会压过 "default y if BTF"，必须逐个强制开启：
+          echo 'CONFIG_KERNEL_BPF_EVENTS=y' >> .config
+          echo 'CONFIG_KERNEL_XDP_SOCKETS=y' >> .config
           echo 'CONFIG_KERNEL_CGROUP_BPF=y' >> .config
           echo 'CONFIG_BPF_TOOLCHAIN_BUILD_LLVM=y' >> .config
           echo 'CONFIG_PACKAGE_dae=y' >> .config
