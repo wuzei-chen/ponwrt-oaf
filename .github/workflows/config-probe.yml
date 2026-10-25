@@ -50,9 +50,12 @@ jobs:
             echo "== build_dir layout =="
             ls build_dir/ 2>/dev/null
             ls build_dir/target-* 2>/dev/null | head -8
-            echo "== all kernel config candidates =="
-            find build_dir -maxdepth 3 -name '*.config' -o -maxdepth 3 -name 'config-*' 2>/dev/null | head -10
-            KC=$(find build_dir -path '*linux-airoha*' -name '.config' 2>/dev/null | head -1)
+            echo "== linux build dir =="
+            ls build_dir/target-*/linux-airoha_an7581/ 2>/dev/null | head -12
+            echo "== all config candidates =="
+            find build_dir -name '*.config' 2>/dev/null | head -10
+            find build_dir -name 'config-*' 2>/dev/null | grep -v kernel- | head -6
+            KC=$(find build_dir -name '.config' -path '*linux*' 2>/dev/null | head -1)
             echo "kernel config: $KC"
             grep -E 'CONFIG_(DEBUG_INFO|DEBUG_INFO_BTF|DEBUG_INFO_REDUCED|BPF_SYSCALL|XDP_SOCKETS|NET_SCH_BPF|BPF_EVENTS|CGROUP_BPF)=' "$KC" 2>/dev/null || echo "grep failed" 
           } > /tmp/probe-out.txt 2>&1
