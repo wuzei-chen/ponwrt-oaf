@@ -1,0 +1,56 @@
+name: Config probe
+
+# 轻量探针：只跑 Configure 段（kconfig 合并 + 定制增量 + defconfig），
+# 把解析结果发布为 Release 资产 config-probe.txt，用于诊断 BTF/dae 为何缺失。
+on:
+  push:
+    paths: ['.github/workflows/config-probe.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Clone PonWrt source
+        run: git clone --depth 1 --branch master https://github.com/pbs05/ponwrt.git .
+
+      - name: Install feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          echo "=== dae in feeds ==="
+          ls -d package/feeds/packages/dae 2>/dev/null || echo "dae NOT in feeds"
+
+      - name: Configure with increments
+        run: |
+          ./scripts/kconfig.pl + configs/an7581.config configs/release.config > .config
+          echo '# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set' >> .config
+          echo 'CONFIG_KERNEL_DEBUG_INFO_BTF=y' >> .config
+          echo 'CONFIG_KERNEL_CGROUP_BPF=y' >> .config
+          echo 'CONFIG_BPF_TOOLCHAIN_BUILD_LLVM=y' >> .config
+          echo 'CONFIG_PACKAGE_dae=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-sched-bpf=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-veth=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-xdp-sockets-diag=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nft-tproxy=y' >> .config
+          make defconfig
+          {
+            echo "== BEFORE-DEFCONFIG echoes are gone; resolved values after defconfig =="
+            grep -E 'CONFIG_(KERNEL_DEBUG_INFO|KERNEL_DEBUG_INFO_BTF|KERNEL_BPF_EVENTS|KERNEL_CGROUP_BPF|BPF_TOOLCHAIN|HAS_BPF_TOOLCHAIN)' .config
+            echo "== packages =="
+            grep -E 'CONFIG_PACKAGE_(dae|kmod-sched-bpf|kmod-veth|kmod-xdp-sockets-diag|kmod-nft-tproxy)=' .config || echo "PACKAGE LINES DROPPED"
+            echo "== dae feed present? =="
+            ls -d package/feeds/packages/dae 2>/dev/null || echo "dae NOT in feeds"
+          } | tee probe-out.txt
+
+      - name: Publish probe result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create config-probe probe-out.txt --repo wuzei-chen/ponwrt-oaf \
+            --title "config probe" --notes "resolved config probe" --clobber || \
+          gh release upload config-probe probe-out.txt --repo wuzei-chen/ponwrt-oaf --clobber
