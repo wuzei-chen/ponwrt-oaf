@@ -1,7 +1,5 @@
 name: Config probe
 
-# 轻量探针：只跑 Configure 段（kconfig 合并 + 定制增量 + defconfig），
-# 把解析结果发布为 Release 资产 config-probe.txt，用于诊断 BTF/dae 为何缺失。
 on:
   push:
     paths: ['.github/workflows/config-probe.yml']
@@ -15,42 +13,45 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - name: Clone PonWrt source
-        run: git clone --depth 1 --branch master https://github.com/pbs05/ponwrt.git .
-
-      - name: Install feeds
+      - name: Probe
         run: |
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
-          echo "=== dae in feeds ==="
-          ls -d package/feeds/packages/dae 2>/dev/null || echo "dae NOT in feeds"
-
-      - name: Configure with increments
-        run: |
-          ./scripts/kconfig.pl + configs/an7581.config configs/release.config > .config
-          echo '# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set' >> .config
-          echo 'CONFIG_KERNEL_DEBUG_INFO_BTF=y' >> .config
-          echo 'CONFIG_KERNEL_CGROUP_BPF=y' >> .config
-          echo 'CONFIG_BPF_TOOLCHAIN_BUILD_LLVM=y' >> .config
-          echo 'CONFIG_PACKAGE_dae=y' >> .config
-          echo 'CONFIG_PACKAGE_kmod-sched-bpf=y' >> .config
-          echo 'CONFIG_PACKAGE_kmod-veth=y' >> .config
-          echo 'CONFIG_PACKAGE_kmod-xdp-sockets-diag=y' >> .config
-          echo 'CONFIG_PACKAGE_kmod-nft-tproxy=y' >> .config
-          make defconfig
+          set +e
           {
-            echo "== BEFORE-DEFCONFIG echoes are gone; resolved values after defconfig =="
-            grep -E 'CONFIG_(KERNEL_DEBUG_INFO|KERNEL_DEBUG_INFO_BTF|KERNEL_BPF_EVENTS|KERNEL_CGROUP_BPF|BPF_TOOLCHAIN|HAS_BPF_TOOLCHAIN)' .config
-            echo "== packages =="
-            grep -E 'CONFIG_PACKAGE_(dae|kmod-sched-bpf|kmod-veth|kmod-xdp-sockets-diag|kmod-nft-tproxy)=' .config || echo "PACKAGE LINES DROPPED"
-            echo "== dae feed present? =="
+            echo "== clone =="
+            git clone --depth 1 --branch master https://github.com/pbs05/ponwrt.git src 2>&1 | tail -2
+            cd src
+            echo "== feeds update =="
+            ./scripts/feeds update -a > /dev/null 2>&1; echo "update rc=$?"
+            ./scripts/feeds install -a > /dev/null 2>&1; echo "install rc=$?"
+            echo "== dae in feeds? =="
             ls -d package/feeds/packages/dae 2>/dev/null || echo "dae NOT in feeds"
-          } | tee probe-out.txt
-
+            ls package/feeds/packages/dae/ 2>/dev/null | head -3
+            echo "== kconfig merge =="
+            ./scripts/kconfig.pl + configs/an7581.config configs/release.config > .config; echo "merge rc=$?"
+            echo '# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set' >> .config
+            echo 'CONFIG_KERNEL_DEBUG_INFO_BTF=y' >> .config
+            echo 'CONFIG_KERNEL_CGROUP_BPF=y' >> .config
+            echo 'CONFIG_BPF_TOOLCHAIN_BUILD_LLVM=y' >> .config
+            echo 'CONFIG_PACKAGE_dae=y' >> .config
+            echo 'CONFIG_PACKAGE_kmod-sched-bpf=y' >> .config
+            echo 'CONFIG_PACKAGE_kmod-veth=y' >> .config
+            echo 'CONFIG_PACKAGE_kmod-xdp-sockets-diag=y' >> .config
+            echo 'CONFIG_PACKAGE_kmod-nft-tproxy=y' >> .config
+            echo "== defconfig =="
+            make defconfig > /dev/null 2>&1; echo "defconfig rc=$?"
+            echo "== kernel options resolved =="
+            grep -E 'CONFIG_(KERNEL_DEBUG_INFO|KERNEL_DEBUG_INFO_BTF|KERNEL_BPF_EVENTS|KERNEL_CGROUP_BPF|BPF_TOOLCHAIN|HAS_BPF_TOOLCHAIN)' .config || echo "KERNEL LINES DROPPED"
+            echo "== packages resolved =="
+            grep -E 'CONFIG_PACKAGE_(dae|kmod-sched-bpf|kmod-veth|kmod-xdp-sockets-diag|kmod-nft-tproxy)=' .config || echo "PACKAGE LINES DROPPED"
+          } > /tmp/probe-out.txt 2>&1
+          cat /tmp/probe-out.txt
+          cp /tmp/probe-out.txt "$GITHUB_WORKSPACE/probe-out.txt" || true
+          echo done
       - name: Publish probe result
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create config-probe probe-out.txt --repo wuzei-chen/ponwrt-oaf \
-            --title "config probe" --notes "resolved config probe" --clobber || \
+            --title "config probe" --notes "resolved config probe" || \
           gh release upload config-probe probe-out.txt --repo wuzei-chen/ponwrt-oaf --clobber
