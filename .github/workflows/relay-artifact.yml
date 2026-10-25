@@ -21,7 +21,7 @@ jobs:
       - name: Download artifact and create release
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACT_ID: '[exit=1]'
+          ARTIFACT_ID: '12615388611'
           TAG: 'ponwrt-an7581-btf-dae-20261025-r3'
         run: |
           set -euxo pipefail
