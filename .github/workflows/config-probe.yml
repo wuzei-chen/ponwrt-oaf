@@ -32,6 +32,8 @@ jobs:
             echo 'CONFIG_KERNEL_DEBUG_INFO_BTF=y' >> .config
             echo 'CONFIG_KERNEL_CGROUP_BPF=y' >> .config
             echo 'CONFIG_BPF_TOOLCHAIN_BUILD_LLVM=y' >> .config
+          echo 'CONFIG_KERNEL_BPF_EVENTS=y' >> .config
+          echo 'CONFIG_KERNEL_XDP_SOCKETS=y' >> .config
             echo 'CONFIG_PACKAGE_dae=y' >> .config
             echo 'CONFIG_PACKAGE_kmod-sched-bpf=y' >> .config
             echo 'CONFIG_PACKAGE_kmod-veth=y' >> .config
@@ -40,7 +42,7 @@ jobs:
             echo "== defconfig =="
             make defconfig > /dev/null 2>&1; echo "defconfig rc=$?"
             echo "== kernel options resolved =="
-            grep -E 'CONFIG_(KERNEL_DEBUG_INFO|KERNEL_DEBUG_INFO_BTF|KERNEL_BPF_EVENTS|KERNEL_CGROUP_BPF|BPF_TOOLCHAIN|HAS_BPF_TOOLCHAIN)' .config || echo "KERNEL LINES DROPPED"
+            grep -E 'CONFIG_(KERNEL_DEBUG_INFO|KERNEL_DEBUG_INFO_BTF|KERNEL_BPF_EVENTS|KERNEL_XDP_SOCKETS|KERNEL_CGROUP_BPF|BPF_TOOLCHAIN|HAS_BPF_TOOLCHAIN)' .config || echo "KERNEL LINES DROPPED"
             echo "== packages resolved =="
             grep -E 'CONFIG_PACKAGE_(dae|kmod-sched-bpf|kmod-veth|kmod-xdp-sockets-diag|kmod-nft-tproxy)=' .config || echo "PACKAGE LINES DROPPED"
           } > /tmp/probe-out.txt 2>&1
