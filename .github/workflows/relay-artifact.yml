@@ -44,3 +44,21 @@ jobs:
               --title "PonWrt an7581 @ upstream master (2026-10-24)" \
               --notes "Built from pbs05/ponwrt master by run 40070505725. Contains ponwrt-an7581.tar.zst + sha256sums."
           fi
+      # 备用通道：设备直连 release CDN 不稳定，把镜像推到 git 分支，
+      # 本机 git 协议可靠 → clone 后走局域网推给设备。
+      - name: Publish image to git branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p gitout
+          cp pkg/ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-squashfs-sysupgrade.itb gitout/firmware.itb
+          cd gitout
+          git init -q .
+          git config user.name wuzei-chen
+          git config user.email wuzei-chen@users.noreply.github.com
+          git add firmware.itb
+          git commit -q -m "firmware: nokia_xg-040g-md ubi squashfs sysupgrade (btf+dae)"
+          git branch -M firmware-r4
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/wuzei-chen/ponwrt-oaf.git"
+          git push -f origin firmware-r4
