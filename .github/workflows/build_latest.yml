@@ -93,6 +93,12 @@ jobs:
           #  - OpenClash：Clash/mihomo 代理（2026-10-26，固件内建避免刷机后重装；
           #    mihomo 内核本体不进固件，由 clash-core git 分支通道供给）
           echo 'CONFIG_PACKAGE_luci-app-openclash=y' >> .config
+          #  - USB 手机共享网络（USB 网络共享 / 个人热点）：rndis=安卓、
+          #    cdc-ncm=iPhone/新安卓、cdc-ether=兜底；usbnet 为核心依赖
+          echo 'CONFIG_PACKAGE_kmod-usb-net=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-net-rndis=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-net-cdc-ncm=y' >> .config
           #  - dae eBPF 透明代理（2026-10-25 改进1，对齐恩山"光猫吃鹅"）：
           #    2026-10-25 二次教训：必须用 KERNEL_ 前缀选项（裸 CONFIG_DEBUG_INFO_BTF
           #    被 defconfig 丢弃），且 base config 的 KERNEL_DEBUG_INFO_REDUCED=y 会
