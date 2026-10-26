@@ -1,0 +1,54 @@
+name: Get Clash core
+
+# 下载 mihomo(Meta) aarch64 内核并推送到 git 分支 clash-core，
+# 供设备经 codeload.github.com 拉取（设备直连 release CDN 不稳）。
+on:
+  push:
+    paths: ['.github/workflows/get-clash-core.yml']
+  workflow_dispatch:
+    inputs:
+      ver:
+        description: 'mihomo version tag (empty = latest)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Download core
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ inputs.ver }}
+        run: |
+          set -euxo pipefail
+          if [ -n "$VER" ]; then
+            gh release download "$VER" -R MetaCubeX/mihomo -p 'mihomo-linux-arm64-v*.gz' -O core.gz
+          else
+            gh release download -R MetaCubeX/mihomo -p 'mihomo-linux-arm64-v*.gz' -O core.gz
+          fi
+          gunzip -f core.gz
+          mv core clash_meta
+          chmod +x clash_meta
+          ls -la clash_meta
+          ./clash_meta -v || true
+
+      - name: Push to branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p gitout && mv clash_meta gitout/clash_meta
+          cd gitout
+          git init -q .
+          git config user.name wuzei-chen
+          git config user.email wuzei-chen@users.noreply.github.com
+          git add clash_meta
+          git commit -q -m "clash core: mihomo linux-arm64"
+          git branch -M clash-core
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/wuzei-chen/ponwrt-oaf.git"
+          git push -f origin clash-core
