@@ -21,8 +21,8 @@ jobs:
       - name: Download artifact and create release
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACT_ID: '12615388611'
-          TAG: 'ponwrt-an7581-btf-dae-20261025-r3'
+          ARTIFACT_ID: '12624343117'
+          TAG: 'ponwrt-an7581-btf-dae-20261025-r4'
         run: |
           set -euxo pipefail
           gh api "/repos/wuzei-chen/ponwrt-oaf/actions/artifacts/$ARTIFACT_ID/zip" > art.zip
