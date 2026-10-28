@@ -66,9 +66,8 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p gitout
-          ITB=$(ls pkg/*nokia_xg-040g-md*sysupgrade*.itb)
-          test -n "$ITB"
-          cp "$ITB" gitout/firmware.itb
+          ls -l pkg/*.itb
+          cp pkg/ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-squashfs-sysupgrade.itb gitout/firmware.itb
           cp pkg/sha256sums gitout/sha256sums 2>/dev/null || true
           cd gitout
           git init -q .
