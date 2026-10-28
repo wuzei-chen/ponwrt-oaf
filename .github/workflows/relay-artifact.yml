@@ -1,8 +1,22 @@
 name: Relay artifact to Release
 
-# 将指定 run 的 artifact 转存为 GitHub Release（artifact 14 天过期，Release 永久，且 release
-# 下载走 github.com 域名，本机网络可达 api.github.com 不可达）
-# 本次硬编码 artifact id：12552984689（run 40070505725, ponwrt-an7581-master）
+# 将指定 run 的 artifact 转存为 GitHub Release + git 分支（artifact 14 天过期，Release 永久；
+# 设备 side release CDN 不稳定，走 codeload 分支通道）
+#
+# 本次目标（2026-10-28）：
+#   run      40362912347  (Build PonWrt an7581 (upstream), head e5d6c9e, completed/success)
+#   artifact 12681960445  (880,423,496 B, expired=false, 约 2026-11-09 前有效)
+#   内容     OpenClash 内建 + kmod-usb-net / rndis / cdc-ether / cdc-ncm
+#
+# 与上一版（r4）的唯一差异：
+#   1. ARTIFACT_ID / TAG 换成本次
+#   2. **镜像推送到 firmware-usb 分支，不再 -f 覆盖 firmware-r4**
+#      （firmware-r4 = 已刷稳定版回滚点，必须保住）
+#
+# 用法：复制到 .github/workflows/relay-artifact.yml → 在 PC 上（需 GIT_SSL_NO_VERIFY=1）
+#   git add .github/workflows/relay-artifact.yml
+#   git commit -m "relay: usb build artifact 12681960445 → ponwrt-an7581-usb-20261028"
+#   GIT_SSL_NO_VERIFY=1 git push origin main
 
 on:
   push:
@@ -16,13 +30,13 @@ permissions:
 jobs:
   relay:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Download artifact and create release
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACT_ID: '12624343117'
-          TAG: 'ponwrt-an7581-btf-dae-20261025-r4'
+          ARTIFACT_ID: '12681960445'
+          TAG: 'ponwrt-an7581-usb-20261028'
         run: |
           set -euxo pipefail
           gh api "/repos/wuzei-chen/ponwrt-oaf/actions/artifacts/$ARTIFACT_ID/zip" > art.zip
@@ -41,11 +55,11 @@ jobs:
             gh release create "$TAG" pkg/* \
               --repo wuzei-chen/ponwrt-oaf \
               --target main \
-              --title "PonWrt an7581 @ upstream master (2026-10-24)" \
-              --notes "Built from pbs05/ponwrt master by run 40070505725. Contains ponwrt-an7581.tar.zst + sha256sums."
+              --title "PonWrt an7581 — OpenClash + USB tethering (2026-10-28)" \
+              --notes "Built from pbs05/ponwrt master by run 40362912347 (head e5d6c9e). luci-app-openclash baked in + kmod-usb-net/rndis/cdc-ether/cdc-ncm. Contains nokia_xg-040g-md sysupgrade itb + sha256sums."
           fi
       # 备用通道：设备直连 release CDN 不稳定，把镜像推到 git 分支，
-      # 本机 git 协议可靠 → clone 后走局域网推给设备。
+      # 设备经 codeload tar.gz 取回（wget -c 多轮续传 + sha256 校验）
       - name: Publish image to git branch
         env:
           GH_TOKEN: ${{ github.token }}
@@ -53,12 +67,16 @@ jobs:
           set -euxo pipefail
           mkdir -p gitout
           cp pkg/ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-squashfs-sysupgrade.itb gitout/firmware.itb
+          cp pkg/sha256sums gitout/sha256sums 2>/dev/null || true
           cd gitout
           git init -q .
           git config user.name wuzei-chen
           git config user.email wuzei-chen@users.noreply.github.com
-          git add firmware.itb
-          git commit -q -m "firmware: nokia_xg-040g-md ubi squashfs sysupgrade (btf+dae)"
-          git branch -M firmware-r4
+          # 注意：不要写成 `git add firmware.itb sha256sums`。artifact 里若没有 sha256sums，
+          # pathspec 不匹配会让 git add 在 `set -euxo pipefail` 下返回非 0，整个 relay 直接失败。
+          # 用 -A 暂存 gitout 下实际存在的文件（firmware.itb 必有，sha256sums 可选）。
+          git add -A
+          git commit -q -m "firmware: nokia_xg-040g-md ubi squashfs sysupgrade (openclash + usb tethering, e5d6c9e)"
+          git branch -M firmware-usb
           git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/wuzei-chen/ponwrt-oaf.git"
-          git push -f origin firmware-r4
+          git push -f origin firmware-usb
