@@ -58,7 +58,7 @@ jobs:
               --title "PonWrt an7581 — OpenClash + USB tethering (2026-10-28)" \
               --notes "Built from pbs05/ponwrt master by run 40362912347 (head e5d6c9e). luci-app-openclash baked in + kmod-usb-net/rndis/cdc-ether/cdc-ncm. Contains nokia_xg-040g-md sysupgrade itb + sha256sums."
           fi
-      # 备用通道：设备直连 release CDN 不稳定，把镜像推到 git 分支，
+      # 备用通道（force update):
       # 设备经 codeload tar.gz 取回（wget -c 多轮续传 + sha256 校验）
       - name: Publish image to git branch
         env:
